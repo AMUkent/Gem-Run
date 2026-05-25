@@ -7,4 +7,4 @@ Lose: Timer runs out and player doesn't reach target/ player hits too many obsta
 Scene:MainMenu,Game,WinScreen,LoseScreen
 Controls:W-Forward;D-Right;A-Left;S-Back
 Team members: Imeobong Godwin Ime: Player movement, camera, player testing, level design
-UI, scene management, win/lose logic
+Abdurrahman MU Imran Khan: UI, scene management, win/lose logic
