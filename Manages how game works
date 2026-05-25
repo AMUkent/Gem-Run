@@ -1,0 +1,161 @@
+using System.Collections;
+using UnityEngine;
+using UnityEngine.SceneManagement;
+
+/// <summary>
+/// Central game authority. Lives in the Game scene.
+/// Tracks score, health, timer, and manages win / lose states.
+///
+/// Scene Build Index convention (set in File → Build Settings):
+///   0 = MainMenu
+///   1 = Game
+///   2 = Win
+///   3 = Lose
+/// </summary>
+public class GameManager : MonoBehaviour
+{
+    // ── Singleton ───────────────────────────────────────────────────────────
+    public static GameManager Instance { get; private set; }
+
+    // ── Inspector Fields ────────────────────────────────────────────────────
+    [Header("Game Rules")]
+    [Tooltip("Number of collectibles the player must gather to win")]
+    public int collectiblesToWin = 10;
+
+    [Tooltip("Player health at the start of the game")]
+    public int maxHealth = 3;
+
+    [Tooltip("Countdown timer in seconds (0 = no timer)")]
+    public float timeLimit = 60f;
+
+    [Header("References")]
+    [Tooltip("Drag the PlayerController GameObject here")]
+    public PlayerController player;
+
+    [Tooltip("Drag the UIManager GameObject here")]
+    public UIManager uiManager;
+
+    // ── Private State ───────────────────────────────────────────────────────
+    private int _score;
+    private int _currentHealth;
+    private float _timeRemaining;
+    private bool _gameActive;
+
+    // ── Properties (read-only outside) ─────────────────────────────────────
+    public int Score          => _score;
+    public int CurrentHealth  => _currentHealth;
+    public float TimeRemaining => _timeRemaining;
+
+    // ── Unity Lifecycle ─────────────────────────────────────────────────────
+    private void Awake()
+    {
+        // Enforce singleton
+        if (Instance != null && Instance != this)
+        {
+            Destroy(gameObject);
+            return;
+        }
+        Instance = this;
+    }
+
+    private void Start()
+    {
+        ValidateReferences();
+        StartGame();
+    }
+
+    private void Update()
+    {
+        if (!_gameActive) return;
+
+        if (timeLimit > 0f)
+        {
+            _timeRemaining -= Time.deltaTime;
+            uiManager.UpdateTimer(_timeRemaining);
+
+            if (_timeRemaining <= 0f)
+            {
+                _timeRemaining = 0f;
+                TriggerLose("Time's up!");
+            }
+        }
+    }
+
+    // ── Public API (called by Collectible, Hazard, etc.) ───────────────────
+
+    /// <summary>Called when the player picks up a collectible.</summary>
+    public void OnCollectiblePickedUp(int points)
+    {
+        if (!_gameActive) return;
+
+        _score += points;
+        uiManager.UpdateScore(_score);
+
+        // Check win condition
+        int collected = _score / 10;          // each gem = 10 pts by default
+        if (collected >= collectiblesToWin)
+            TriggerWin();
+    }
+
+    /// <summary>Called when a hazard damages the player.</summary>
+    public void OnPlayerDamaged(int amount)
+    {
+        if (!_gameActive) return;
+
+        _currentHealth -= amount;
+        _currentHealth = Mathf.Max(0, _currentHealth);
+        uiManager.UpdateHealth(_currentHealth, maxHealth);
+
+        if (_currentHealth <= 0)
+            TriggerLose("You were defeated!");
+    }
+
+    // ── Private Methods ─────────────────────────────────────────────────────
+    private void StartGame()
+    {
+        _score          = 0;
+        _currentHealth  = maxHealth;
+        _timeRemaining  = timeLimit > 0f ? timeLimit : float.MaxValue;
+        _gameActive     = true;
+
+        uiManager.UpdateScore(_score);
+        uiManager.UpdateHealth(_currentHealth, maxHealth);
+        if (timeLimit > 0f)
+            uiManager.UpdateTimer(_timeRemaining);
+    }
+
+    private void TriggerWin()
+    {
+        if (!_gameActive) return;
+        _gameActive = false;
+
+        player.Freeze();
+        CameraFollow.UnlockCursor();
+        StartCoroutine(LoadSceneDelayed(2, 1.5f));   // Win scene after brief pause
+    }
+
+    private void TriggerLose(string reason)
+    {
+        if (!_gameActive) return;
+        _gameActive = false;
+
+        player.Freeze();
+        CameraFollow.UnlockCursor();
+        Debug.Log($"[GameManager] Lose triggered: {reason}");
+        StartCoroutine(LoadSceneDelayed(3, 1.5f));   // Lose scene after brief pause
+    }
+
+    private IEnumerator LoadSceneDelayed(int buildIndex, float delay)
+    {
+        yield return new WaitForSeconds(delay);
+        SceneManager.LoadScene(buildIndex);
+    }
+
+    private void ValidateReferences()
+    {
+        if (player == null)
+            Debug.LogError("[GameManager] 'player' reference is NOT assigned in the Inspector!", this);
+        if (uiManager == null)
+            Debug.LogError("[GameManager] 'uiManager' reference is NOT assigned in the Inspector!", this);
+    }
+}
